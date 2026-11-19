@@ -1,0 +1,163 @@
+// Mini-Linear: Multi-Tenant Kanban & Issue Tracker — PostgreSQL (Neon) schema
+//
+// Production schema for Vercel + Neon deployments. This is the sandbox's
+// SQLite schema converted to PostgreSQL exactly as documented in the SQLite
+// file: the three String columns marked [pg-enum] there become native Prisma
+// enums here, and the datasource is wired for Neon's two connection strings:
+//
+//   DATABASE_URL — Neon POOLED connection string ("-pooler" host).
+//                  Used by the app at runtime; keeps serverless functions
+//                  from exhausting Neon's connection limit.
+//   DIRECT_URL   — Neon DIRECT (non-pooled) connection string.
+//                  Used only by the Prisma CLI (db push / migrate / seed);
+//                  migrations must not go through a transaction-mode pooler.
+//
+// First-time setup against a fresh Neon database:
+//   npx prisma db push     # creates all tables (uses DIRECT_URL)
+//   npx prisma db seed     # loads the Acme Product demo workspace
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum IssueStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships      WorkspaceMember[]
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  createdProjects  Project[]
+  assignedIssues   Issue[]           @relation("IssueAssignee")
+  reportedIssues   Issue[]           @relation("IssueCreator")
+  comments         Comment[]
+  activities       Activity[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+
+  owner    User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  WorkspaceMember[]
+  projects Project[]
+}
+
+model WorkspaceMember {
+  id          String @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        Role   @default(MEMBER)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // A user can never join the same workspace twice.
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  workspaceId String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id])
+  issues    Issue[]
+  activities Activity[]
+
+  // Project names are unique inside a workspace, not globally.
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model Issue {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  status      IssueStatus  @default(BACKLOG)
+  priority    IssuePriority @default(MEDIUM)
+  position    Float        @default(0)
+  projectId   String
+  assigneeId  String?
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee  User?     @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy User      @relation("IssueCreator", fields: [createdById], references: [id])
+  comments  Comment[]
+  activities Activity[]
+
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@index([createdById])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  body      String
+  issueId   String
+  authorId  String
+  createdAt DateTime @default(now())
+
+  issue  Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+  @@index([authorId])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      String
+  message   String
+  issueId   String?
+  projectId String
+  actorId   String
+  createdAt DateTime @default(now())
+
+  issue    Issue?   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor    User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+  @@index([projectId])
+}
