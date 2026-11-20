@@ -74,7 +74,7 @@ export function CreateIssueDialog({
 
   /**
    * Sends the current title/notes to /api/ai/enhance-issue and fills the
-   * form fields with the structured GLM response. The server degrades to a
+   * form fields with the structured Groq response. The server degrades to a
    * deterministic mock when no model backend is configured; `mock: true`
    * flips an in-dialog banner instead of failing.
    */
@@ -104,7 +104,7 @@ export function CreateIssueDialog({
       setPriority(payload.data.priority)
       if (payload.mock) {
         setAiMockNotice(
-          'Mock mode: no AI backend is configured (set ZAI_API_KEY in your environment variables), so a deterministic placeholder was filled in instead of live GLM output.',
+          'Mock mode: no AI backend is configured (set GROQ_API_KEY in your environment variables), so a deterministic placeholder was filled in instead of live Groq output.',
         )
       } else {
         toast.success('Fields enhanced with AI')

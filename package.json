@@ -17,8 +17,8 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^4.0.85",
     "@ai-sdk/react": "^4.0.177",
-    "@ai-sdk/zai": "^3.0.55",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

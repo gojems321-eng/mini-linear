@@ -17,7 +17,8 @@ import { AI_MODEL_ID, resolveAiProvider } from '@/server/ai'
  * Agentic Workspace Copilot endpoint (POST /api/ai/copilot).
  *
  * Pipeline: auth() gate -> request schema (workspaceId + UIMessages) ->
- * workspace membership check -> streamText with `zai('glm-5.3-flash')` and
+ * workspace membership check -> streamText with `groq(AI_MODEL_ID)` (default
+ * llama-3.3-70b-versatile, overridable via GROQ_MODEL) and
  * the three RBAC-scoped Prisma tools.
  *
  * `stopWhen: stepCountIs(5)` is the AI SDK v7 replacement for
@@ -25,13 +26,13 @@ import { AI_MODEL_ID, resolveAiProvider } from '@/server/ai'
  * (call tool -> read DB rows -> call another tool -> ...) before composing
  * its final answer.
  *
- * Fallback ladder (mirrors the Issue Assistant): ZAI_API_KEY -> local dev
- * gateway (sandbox only) -> a helpful static message streamed as a normal
- * UIMessage so the drawer keeps working end-to-end without a model backend.
+ * Fallback ladder (mirrors the Issue Assistant): GROQ_API_KEY -> a helpful
+ * static message streamed as a normal UIMessage so the drawer keeps working
+ * end-to-end without a model backend.
  */
 
 const COPILOT_FALLBACK_MESSAGE =
-  'The Copilot cannot reach its AI backend right now. Set ZAI_API_KEY in your ' +
+  'The Copilot cannot reach its AI backend right now. Set GROQ_API_KEY in your ' +
   'deployment environment variables and try again. ' +
   'Everything else in Mini-Linear keeps working — boards, issues and members are unaffected.'
 

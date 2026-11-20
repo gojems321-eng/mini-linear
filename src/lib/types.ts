@@ -177,9 +177,9 @@ export type EnhancedIssue = {
 
 /**
  * Response shape of the AI enhance endpoint. `mock: true` means no live
- * model backend was available (missing ZAI_API_KEY and no sandbox gateway
- * config, or the live call failed) and a deterministic placeholder was
- * returned so the UI can be exercised end-to-end.
+ * model backend was available (missing GROQ_API_KEY, or the live call
+ * failed) and a deterministic placeholder was returned so the UI can be
+ * exercised end-to-end.
  */
 export type EnhanceIssueResponse =
   | { success: true; data: EnhancedIssue; mock: boolean }

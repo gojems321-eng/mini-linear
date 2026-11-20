@@ -1,92 +1,38 @@
 import 'server-only'
 
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import path from 'node:path'
-import { createZai, type ZaiProvider } from '@ai-sdk/zai'
+import { createGroq, type GroqProvider } from '@ai-sdk/groq'
 import { enhancedIssueSchema } from '@/lib/validations/ai'
 import type { EnhancedIssue, IssuePriority } from '@/lib/types'
 
 /**
  * AI backend resolution for the Issue Assistant and Workspace Copilot.
  *
- * The Vercel AI SDK talks to GLM through `@ai-sdk/zai` using
- * `zai('glm-5.3-flash')` (the flash tier keeps enhancements snappy). Three
- * environments are supported, resolved once and cached:
+ * The Vercel AI SDK talks to Groq through `@ai-sdk/groq` using
+ * `groq(AI_MODEL_ID)` (default: llama-3.3-70b-versatile, overridable via the
+ * GROQ_MODEL environment variable). Two environments are supported, resolved
+ * once and cached:
  *
- *   1. live-zai-api          — ZAI_API_KEY is present (the Vercel/production
- *                              path). The provider is pointed at the public
- *                              https://api.z.ai endpoint with the key passed
- *                              explicitly, and NO sandbox gateway fallback is
- *                              ever consulted in this mode.
- *   2. live-sandbox-gateway  — no ZAI_API_KEY, but a pre-authenticated
- *                              `.z-ai-config` file exists (local sandbox/CI
- *                              only; the file never exists on Vercel). The
- *                              same provider class is pointed at that
- *                              OpenAI-compatible gateway with its headers.
- *   3. mock                  — neither is available: `resolveAiProvider`
- *                              returns null and callers fall back to
- *                              `mockEnhancement` so the UI stays testable.
+ *   1. live-groq   — GROQ_API_KEY is present. The provider talks to Groq's
+ *                    OpenAI-compatible API with the key passed explicitly.
+ *   2. mock        — no key: `resolveAiProvider` returns null and callers
+ *                    fall back to `mockEnhancement` so the UI stays testable.
  */
 
-export const AI_MODEL_ID = 'glm-5.3-flash'
+export const AI_MODEL_ID = process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile'
 
-export type AiMode = 'live-zai-api' | 'live-sandbox-gateway' | 'mock'
+export type AiMode = 'live-groq' | 'mock'
 
-type GatewayConfig = {
-  baseUrl: string
-  apiKey: string
-  headers: Record<string, string>
-}
+let cached: { provider: GroqProvider | null; mode: AiMode } | undefined
 
-let cached: { provider: ZaiProvider | null; mode: AiMode } | undefined
-
-/**
- * Local-development escape hatch only. Looks for a pre-authenticated gateway
- * config file that exists exclusively in the hosted sandbox; on Vercel or any
- * normal host neither candidate path exists, so this returns null and the
- * ladder moves on to the mock tier.
- */
-function loadSandboxGatewayConfig(): GatewayConfig | null {
-  const candidates = ['/etc/.z-ai-config', path.join(homedir(), '.z-ai-config')]
-  for (const filePath of candidates) {
-    try {
-      const config = JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>
-      const baseUrl = typeof config.baseUrl === 'string' ? config.baseUrl : null
-      const apiKey = typeof config.apiKey === 'string' ? config.apiKey : null
-      if (!baseUrl || !apiKey) continue
-      const headers: Record<string, string> = { 'X-Z-AI-From': 'Z' }
-      if (typeof config.chatId === 'string') headers['X-Chat-Id'] = config.chatId
-      if (typeof config.userId === 'string') headers['X-User-Id'] = config.userId
-      if (typeof config.token === 'string') headers['X-Token'] = config.token
-      return { baseUrl, apiKey, headers }
-    } catch {
-      // Missing or malformed file — try the next candidate.
-    }
-  }
-  return null
-}
-
-export function resolveAiProvider(): { provider: ZaiProvider | null; mode: AiMode } {
+export function resolveAiProvider(): { provider: GroqProvider | null; mode: AiMode } {
   if (cached) return cached
 
-  const envKey = process.env.ZAI_API_KEY
+  const envKey = process.env.GROQ_API_KEY
   if (typeof envKey === 'string' && envKey.trim().length > 0) {
-    // Production path: public Z.AI endpoint with the key passed explicitly.
-    // The sandbox gateway below is intentionally unreachable from this mode.
-    cached = { provider: createZai({ apiKey: envKey.trim() }), mode: 'live-zai-api' }
+    // Live path: Groq's API with the key passed explicitly.
+    cached = { provider: createGroq({ apiKey: envKey.trim() }), mode: 'live-groq' }
   } else {
-    const gateway = loadSandboxGatewayConfig()
-    cached = gateway
-      ? {
-          provider: createZai({
-            baseURL: gateway.baseUrl,
-            apiKey: gateway.apiKey,
-            headers: gateway.headers,
-          }),
-          mode: 'live-sandbox-gateway',
-        }
-      : { provider: null, mode: 'mock' }
+    cached = { provider: null, mode: 'mock' }
   }
   return cached
 }
@@ -122,7 +68,7 @@ function deriveTitle(rawInput: string): string {
 }
 
 /**
- * Deterministic offline stand-in for a live GLM call. Produces the exact
+ * Deterministic offline stand-in for a live Groq call. Produces the exact
  * same shape as the real pipeline so the Create Issue dialog can be
  * exercised end-to-end without any model backend.
  */
@@ -156,10 +102,11 @@ export function stripJsonFence(text: string): string {
 }
 
 /**
- * The sandbox gateway does not support JSON-schema response formats, so the
- * model occasionally drifts from the schema and the SDK throws
- * AI_NoObjectGeneratedError. The raw completion text rides along on that
- * error — parse and validate it manually before giving up on a live answer.
+ * Groq models can drift from the requested JSON shape (and unsupported
+ * models reject json_schema response formats outright), in which case the
+ * SDK throws AI_NoObjectGeneratedError. The raw completion text rides along
+ * on that error — parse and validate it manually before giving up on a live
+ * answer.
  */
 export function salvageEnhancedIssue(error: unknown): EnhancedIssue | null {
   const raw = (error as { text?: unknown } | null)?.text

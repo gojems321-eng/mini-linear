@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { generateText, Output } from 'ai'
+import type { GroqLanguageModelChatOptions } from '@ai-sdk/groq'
 import { auth } from '@/lib/session'
 import { enhanceIssueSchema, enhancedIssueSchema } from '@/lib/validations/ai'
 import {
@@ -13,13 +14,20 @@ import {
  * AI Issue Assistant endpoint (POST /api/ai/enhance-issue).
  *
  * Pipeline: auth() gate -> Zod request validation -> structured generation
- * with `zai('glm-5.3-flash')` via the Vercel AI SDK -> Zod-validated
+ * with `groq(AI_MODEL_ID)` via the Vercel AI SDK -> Zod-validated
  * `{ title, description, priority }` payload.
+ *
+ * Groq note: llama-3.3-70b-versatile does not support Groq's json_schema
+ * structured outputs (it would 400), so this route passes
+ * `structuredOutputs: false` — Groq then uses plain json_object mode (the
+ * system prompt already contains the word "JSON" as that mode requires).
  *
  * Degradation ladder (the UI must stay testable without crashing):
  *   structured output  ->  raw-text salvage  ->  deterministic mock
- * `mock: true` in the response tells the client to show the "mock mode"
- * banner instead of claiming a live model answer.
+ * A Groq 400 — or any SDK error — falls into the same ladder: the salvage
+ * step tries to recover a drifted-but-parseable answer, otherwise the
+ * deterministic mock serves. `mock: true` in the response tells the client
+ * to show the "mock mode" banner instead of claiming a live model answer.
  */
 
 const ENHANCE_SYSTEM_PROMPT = [
@@ -70,10 +78,18 @@ export async function POST(request: Request) {
   // 4. Structured generation. `Output.object` is the AI SDK v7 replacement
   //    for the deprecated generateObject; the schema lives in
   //    src/lib/validations/ai.ts and normalises model quirks.
+  //    structuredOutputs: false keeps Groq in json_object mode (llama-3.3
+  //    rejects strict json_schema), and a resulting 400 flows through the
+  //    catch below -> salvage -> mock, never a 500.
   try {
     const { output } = await generateText({
       model: provider(AI_MODEL_ID),
       output: Output.object({ schema: enhancedIssueSchema }),
+      providerOptions: {
+        groq: {
+          structuredOutputs: false,
+        } satisfies GroqLanguageModelChatOptions,
+      },
       system: ENHANCE_SYSTEM_PROMPT,
       prompt: `Rough note from the team member:\n\n${rawInput}`,
       abortSignal: AbortSignal.timeout(45_000),
