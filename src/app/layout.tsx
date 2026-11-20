@@ -13,11 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mini-Linear — Kanban & Issue Tracker",
+  title: "Mini-Linear",
   description:
     "Multi-tenant Kanban board and issue tracker with workspaces, projects, role-based access and realtime activity.",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/ml-icon.svg",
+    apple: "/ml-icon.png",
   },
 };
 
