@@ -8,7 +8,7 @@ import type { EnhancedIssue, IssuePriority } from '@/lib/types'
  * AI backend resolution for the Issue Assistant and Workspace Copilot.
  *
  * The Vercel AI SDK talks to Groq through `@ai-sdk/groq` using
- * `groq(AI_MODEL_ID)` (default: llama-3.3-70b-versatile, overridable via the
+ * `groq(AI_MODEL_ID)` (default: openai/gpt-oss-120b, overridable via the
  * GROQ_MODEL environment variable). Two environments are supported, resolved
  * once and cached:
  *
@@ -18,7 +18,7 @@ import type { EnhancedIssue, IssuePriority } from '@/lib/types'
  *                    fall back to `mockEnhancement` so the UI stays testable.
  */
 
-export const AI_MODEL_ID = process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile'
+export const AI_MODEL_ID = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b'
 
 export type AiMode = 'live-groq' | 'mock'
 
